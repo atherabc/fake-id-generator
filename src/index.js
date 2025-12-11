@@ -22,7 +22,7 @@ function generateSpecificIdentity(params) {
   let idName = "ID Number";
   let idValue = "";
   let fullAddress = "";
-  let finalStateName = region; // 默认情况
+  let finalStateName = region; 
   let finalPhone = "";
   let finalZip = "";
   
@@ -34,42 +34,44 @@ function generateSpecificIdentity(params) {
     case 'US': default: f = fakerEN_US; break;
   }
 
-  // --- ID 生成逻辑 ---
+  // --- ID 生成逻辑 (含中文对照) ---
   if (country === 'CN') {
     idName = "居民身份证 (ID Card)";
     const cnYear = new Date().getFullYear() - age;
     idValue = `110105${cnYear}0101123X`;
   } else if (country === 'JP') {
-    idName = "マイナンバー (My Number)";
+    idName = "个人编号 (My Number)";
     idValue = f.phone.number('####-####-####');
   } else if (country === 'DE') {
-    idName = "Ausweisnummer";
+    idName = "身份证号 (Ausweisnummer)";
     idValue = f.string.alphanumeric(9).toUpperCase();
   } else {
-    idName = "SSN (Social Security)";
+    // 美国默认
+    idName = "社会安全码 (SSN)";
     idValue = f.string.numeric(3) + "-" + f.string.numeric(2) + "-" + f.string.numeric(4);
   }
 
-  // --- 这里的核心逻辑：处理美国州的精准数据 ---
+  // --- 核心逻辑 ---
   const sexType = gender === 'female' ? 'female' : 'male';
   
   // 1. 州/省名称处理
   let finalStateCode = region;
   if (country === 'US' && US_STATE_DATA[region]) {
-    finalStateName = US_STATE_DATA[region].name; // 获取全称 (Montana)
-    finalStateCode = region; // 保留代码 (MT)
+    finalStateName = US_STATE_DATA[region].name; // 获取全称 (Oregon)
+    finalStateCode = region; // 保留代码 (OR)
   } else if (country === 'US' && !region) {
-     // 如果没选州，随机选一个
+     // 随机选一个州
      const keys = Object.keys(US_STATE_DATA);
      finalStateCode = keys[Math.floor(Math.random() * keys.length)];
      finalStateName = US_STATE_DATA[finalStateCode].name;
   } else {
-     // 其他国家，如果没选就随机
      finalStateName = region || f.location.state();
   }
 
-  // 2. 城市处理 (去除 [Capital] 标记)
-  let finalCity = city ? city.replace(' [Capital]', '') : f.location.city();
+  // 2. 城市处理 (清洗中文)
+  // 前端传来的可能是 "Helena - 海伦娜 [首府]"，我们需要清洗掉 " - " 后面的内容
+  let finalCityRaw = city || f.location.city();
+  let finalCity = finalCityRaw.split(' - ')[0]; // 只取前半部分英文名
 
   // 3. 电话处理 (匹配州区号)
   if (country === 'US' && US_STATE_DATA[finalStateCode]) {
@@ -77,26 +79,25 @@ function generateSpecificIdentity(params) {
     const areaCode = codes[Math.floor(Math.random() * codes.length)];
     const part2 = f.string.numeric(3);
     const part3 = f.string.numeric(4);
-    finalPhone = `${areaCode}-${part2}-${part3}`; // 格式：406-123-4567 (10位)
+    finalPhone = `${areaCode}-${part2}-${part3}`; 
   } else {
     finalPhone = f.phone.number();
   }
 
-  // 4. 邮编处理 (匹配州前缀，只保留5位)
+  // 4. 邮编处理 (匹配州前缀)
   if (country === 'US' && US_STATE_DATA[finalStateCode]) {
     const prefixes = US_STATE_DATA[finalStateCode].zipPrefix;
     const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-    const suffix = f.string.numeric(3); // 补齐后3位
-    finalZip = `${prefix}${suffix}`; // 比如 59012
+    const suffix = f.string.numeric(3); 
+    finalZip = `${prefix}${suffix}`; 
   } else {
-    finalZip = f.location.zipCode('#####'); // 默认5位
+    finalZip = f.location.zipCode('#####'); 
   }
 
   // 5. 街道与完整地址
   const finalStreet = f.location.streetAddress(false);
   
   if (country === 'US') {
-    // 格式：35254 Williamson Ridges Gray, ME 04039
     fullAddress = `${finalStreet} ${finalCity}, ${finalStateCode} ${finalZip}`;
   } else if (country === 'CN') {
     fullAddress = `${finalStateName}${finalCity}${finalStreet}`;
@@ -104,11 +105,10 @@ function generateSpecificIdentity(params) {
     fullAddress = `${finalStreet}, ${finalZip} ${finalCity}, ${finalStateName}`;
   }
   
-  // 6. 信用卡增强 (无横杠，由 Faker 生成再处理)
+  // 6. 信用卡
   const ccType = f.helpers.arrayElement(['Visa', 'MasterCard', 'American Express', 'Discover']);
-  // 生成卡号并去掉横杠
   let ccNum = f.finance.creditCardNumber(ccType.toLowerCase().replace(' ', '-')); 
-  ccNum = ccNum.replace(/-/g, ''); // 移除所有横杠
+  ccNum = ccNum.replace(/-/g, ''); 
   
   const birthDate = f.date.birthdate({ mode: 'age', min: parseInt(age), max: parseInt(age) });
 
@@ -125,8 +125,8 @@ function generateSpecificIdentity(params) {
     },
     location: {
       country: country,
-      stateFull: finalStateName, // 全称
-      stateCode: finalStateCode, // 缩写
+      stateFull: finalStateName,
+      stateCode: finalStateCode,
       city: finalCity,
       street: finalStreet,
       zipCode: finalZip,
@@ -140,7 +140,7 @@ function generateSpecificIdentity(params) {
       ccNumber: ccNum,
       ccType: ccType,
       ccCVV: f.finance.creditCardCVV(),
-      ccExp: f.date.future({ years: 5 }).toISOString().substring(0, 7).replace('-', '/') // 格式 2028/05
+      ccExp: f.date.future({ years: 5 }).toISOString().substring(0, 7).replace('-', '/')
     }
   };
 }
@@ -168,23 +168,20 @@ app.get('/', (c) => {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Pro Identity Generator</title>
+      <title>Pro ID Generator</title>
       <style>
         body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #eef2f6; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 850px; }
         
-        /* 控制面板 */
         .controls { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e0e0e0;}
         .row { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .group { flex: 1; min-width: 150px; }
         label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; font-weight: 600;}
         select, input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; background: #fafafa; }
-        select:focus { border-color: #0070f3; background: white; }
         
         button { background: #0070f3; color: white; border: none; padding: 14px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; transition: 0.2s; margin-top: 10px; }
         button:hover { background: #005bb5; }
 
-        /* 结果卡片 */
         .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08); display: none; animation: fadeIn 0.4s ease; border: 1px solid #eaeaea;}
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
@@ -194,22 +191,20 @@ app.get('/', (c) => {
         
         .info-grid { padding: 25px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
         @media(max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
-
         .full-width { grid-column: span 2; }
         @media(max-width: 600px) { .full-width { grid-column: span 1; } }
 
-        /* 字段样式 */
-        .field { }
         .field label { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; display: flex; justify-content: space-between; }
         .field div { font-family: "Consolas", "Monaco", monospace; font-size: 15px; color: #333; font-weight: 600; border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; min-height: 20px; }
         
         .highlight { color: #0070f3 !important; font-size: 16px !important; }
-        .tag { display: inline-block; background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #555; font-weight: normal; margin-left: 5px;}
     
-        /* 信用卡区域 */
-        .cc-box { background: linear-gradient(135deg, #333, #555); color: white; padding: 15px; border-radius: 8px; margin-top: 5px; }
-        .cc-box label { color: #ccc; }
-        .cc-box div { color: white; border: none; text-shadow: 0 1px 2px rgba(0,0,0,0.3); letter-spacing: 1px; }
+        /* 信用卡增强样式 */
+        .cc-box { background: linear-gradient(135deg, #2c3e50, #4ca1af); color: white; padding: 15px; border-radius: 8px; margin-top: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .cc-box div { color: white; border: none; text-shadow: 0 1px 2px rgba(0,0,0,0.2); letter-spacing: 1px; }
+        .cc-row { display: flex; gap: 20px; margin-top: 10px; }
+        .cc-label { font-size: 10px; opacity: 0.8; display: block; margin-bottom: 2px; text-transform: uppercase; }
+        .cc-val { font-size: 14px; font-weight: bold; }
     </style>
     </head>
     <body>
@@ -248,10 +243,7 @@ app.get('/', (c) => {
             </div>
             <div class="group">
               <label>年龄 / Age</label>
-              <!-- 下拉菜单选择年龄 -->
-              <select id="age">
-                <!-- JS 会自动生成 18-80 的选项 -->
-              </select>
+              <select id="age"></select>
             </div>
           </div>
           <button onclick="generate()">生成身份信息 (Generate Identity)</button>
@@ -272,24 +264,33 @@ app.get('/', (c) => {
               <div id="resFullAddress" class="highlight">-</div>
             </div>
 
-            <div class="field"><label>电话 / Phone (10 digits)</label><div id="resPhone">-</div></div>
+            <div class="field"><label>电话 / Phone</label><div id="resPhone">-</div></div>
             <div class="field"><label>生日 / Birthday</label><div id="resBirthday">-</div></div>
             
             <div class="field"><label id="labelID">SSN</label><div id="resID">-</div></div>
             <div class="field"><label>电子邮箱 / Email</label><div id="resEmail" style="font-size:13px;">-</div></div>
 
             <div class="field"><label>州全称 / State</label><div id="resStateFull">-</div></div>
-            <div class="field"><label>邮编 / Zip Code (5 digits)</label><div id="resZip">-</div></div>
+            <div class="field"><label>邮编 / Zip Code</label><div id="resZip">-</div></div>
 
-            <!-- 信用卡专属区域 -->
+            <!-- 信用卡专属区域 (双语对照) -->
             <div class="field full-width">
               <label>信用卡信息 / Credit Card Details</label>
               <div class="cc-box">
-                <div style="font-size: 18px; margin-bottom: 10px;" id="resCCNum">0000 0000 0000 0000</div>
-                <div style="display: flex; gap: 20px;">
-                  <span style="font-size: 12px; opacity: 0.8;">TYPE: <strong id="resCCType" style="color:white">-</strong></span>
-                  <span style="font-size: 12px; opacity: 0.8;">EXP: <strong id="resCCExp" style="color:white">-</strong></span>
-                  <span style="font-size: 12px; opacity: 0.8;">CVV: <strong id="resCCCVV" style="color:white">-</strong></span>
+                <div style="font-size: 20px; margin-bottom: 10px; font-family: monospace;" id="resCCNum">0000 0000 0000 0000</div>
+                <div class="cc-row">
+                  <div>
+                    <span class="cc-label">类型 / Type</span>
+                    <span class="cc-val" id="resCCType">-</span>
+                  </div>
+                  <div>
+                    <span class="cc-label">过期 / Exp</span>
+                    <span class="cc-val" id="resCCExp">-</span>
+                  </div>
+                  <div>
+                    <span class="cc-label">安全码 / CVV</span>
+                    <span class="cc-val" id="resCCCVV">-</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -299,16 +300,38 @@ app.get('/', (c) => {
       </div>
 
       <script>
-        // --- 前端数据：双语州名 & 首府标注 ---
+        // --- 前端数据：城市中英文对照 ---
+        // 注意：格式为 "English - 中文"，后端会处理只取前半部分
         const geoData = {
           'US': {
-            'MT': { name: 'Montana (MT) - 蒙大拿州', cities: ['Helena [Capital]', 'Billings', 'Missoula', 'Bozeman', 'Great Falls'] },
-            'DE': { name: 'Delaware (DE) - 特拉华州', cities: ['Dover [Capital]', 'Wilmington', 'Newark', 'Middletown'] },
-            'OR': { name: 'Oregon (OR) - 俄勒冈州', cities: ['Salem [Capital]', 'Portland', 'Eugene', 'Gresham'] },
-            'CA': { name: 'California (CA) - 加利福尼亚州', cities: ['Sacramento [Capital]', 'Los Angeles', 'San Francisco', 'San Diego', 'San Jose'] },
-            'NY': { name: 'New York (NY) - 纽约州', cities: ['Albany [Capital]', 'New York City', 'Buffalo', 'Rochester'] },
-            'TX': { name: 'Texas (TX) - 得克萨斯州', cities: ['Austin [Capital]', 'Houston', 'Dallas', 'San Antonio'] },
-            'FL': { name: 'Florida (FL) - 佛罗里达州', cities: ['Tallahassee [Capital]', 'Miami', 'Orlando', 'Tampa', 'Jacksonville'] }
+            'MT': { 
+              name: 'Montana (MT) - 蒙大拿州', 
+              cities: ['Helena - 海伦娜 [首府]', 'Billings - 比灵斯', 'Missoula - 米苏拉', 'Bozeman - 博兹曼', 'Great Falls - 大瀑布城'] 
+            },
+            'DE': { 
+              name: 'Delaware (DE) - 特拉华州', 
+              cities: ['Dover - 多佛 [首府]', 'Wilmington - 威尔明顿', 'Newark - 纽瓦克', 'Middletown - 米德尔敦'] 
+            },
+            'OR': { 
+              name: 'Oregon (OR) - 俄勒冈州', 
+              cities: ['Salem - 塞勒姆 [首府]', 'Portland - 波特兰', 'Eugene - 尤金', 'Gresham - 格雷沙姆'] 
+            },
+            'CA': { 
+              name: 'California (CA) - 加利福尼亚州', 
+              cities: ['Sacramento - 萨克拉门托 [首府]', 'Los Angeles - 洛杉矶', 'San Francisco - 旧金山', 'San Diego - 圣地亚哥', 'San Jose - 圣荷西'] 
+            },
+            'NY': { 
+              name: 'New York (NY) - 纽约州', 
+              cities: ['Albany - 奥尔巴尼 [首府]', 'New York City - 纽约市', 'Buffalo - 布法罗', 'Rochester - 罗切斯特'] 
+            },
+            'TX': { 
+              name: 'Texas (TX) - 得克萨斯州', 
+              cities: ['Austin - 奥斯汀 [首府]', 'Houston - 休斯敦', 'Dallas - 达拉斯', 'San Antonio - 圣安东尼奥'] 
+            },
+            'FL': { 
+              name: 'Florida (FL) - 佛罗里达州', 
+              cities: ['Tallahassee - 塔拉哈西 [首府]', 'Miami - 迈阿密', 'Orlando - 奥兰多', 'Tampa - 坦帕', 'Jacksonville - 杰克逊维尔'] 
+            }
           },
           'CN': {
             '北京市': { name: '北京市', cities: ['东城区', '西城区', '朝阳区', '海淀区'] },
@@ -322,13 +345,13 @@ app.get('/', (c) => {
           }
         };
 
-        // --- 初始化年龄下拉框 (18-80) ---
+        // 初始化年龄下拉框 (18-80)
         const ageSelect = document.getElementById('age');
         for (let i = 18; i <= 80; i++) {
           const opt = document.createElement('option');
           opt.value = i;
           opt.innerText = i;
-          if (i === 25) opt.selected = true; // 默认选中 25
+          if (i === 25) opt.selected = true; 
           ageSelect.appendChild(opt);
         }
 
@@ -347,8 +370,8 @@ app.get('/', (c) => {
             Object.keys(data).forEach(key => {
               const item = data[key];
               const opt = document.createElement('option');
-              opt.value = key; // 传给后端的还是代码 (MT)
-              opt.innerText = item.name; // 显示的是双语 (Montana (MT) - 蒙大拿)
+              opt.value = key; 
+              opt.innerText = item.name; 
               regionSelect.appendChild(opt);
             });
           }
@@ -363,8 +386,9 @@ app.get('/', (c) => {
           if (country && region && geoData[country][region]) {
             geoData[country][region].cities.forEach(c => {
               const opt = document.createElement('option');
+              // 传递给后端的是整个字符串 "Helena - 海伦娜 [首府]"，后端会自己清洗
               opt.value = c;
-              opt.innerText = c; // 显示城市名 (含 [Capital] 标记)
+              opt.innerText = c; 
               citySelect.appendChild(opt);
             });
           }
@@ -403,25 +427,22 @@ app.get('/', (c) => {
           document.getElementById('resName').innerText = data.personal.fullName;
           document.getElementById('resBasic').innerText = \`\${data.personal.gender}, \${data.personal.age} years old\`;
           
-          // 基本信息
           document.getElementById('resPhone').innerText = data.personal.phone;
           document.getElementById('resBirthday').innerText = data.personal.birthday;
           document.getElementById('labelID').innerText = data.ids.name;
           document.getElementById('resID').innerText = data.ids.value;
           
-          // 地址信息
           document.getElementById('resFullAddress').innerText = data.location.formatted;
-          document.getElementById('resStateFull').innerText = data.location.stateFull; // 全称
-          document.getElementById('resZip').innerText = data.location.zipCode; // 5位邮编
+          document.getElementById('resStateFull').innerText = data.location.stateFull;
+          document.getElementById('resZip').innerText = data.location.zipCode; 
           
-          // 信用卡信息 (新布局)
-          document.getElementById('resCCNum').innerText = data.finance.ccNumber; // 无横杠数字
+          // 信用卡
+          document.getElementById('resCCNum').innerText = data.finance.ccNumber;
           document.getElementById('resCCType').innerText = data.finance.ccType;
           document.getElementById('resCCExp').innerText = data.finance.ccExp;
           document.getElementById('resCCCVV').innerText = data.finance.ccCVV;
           
-          // 随便加个邮箱
-          document.getElementById('resEmail').innerText = \`user\${Math.floor(Math.random()*999)}@example.com\`; 
+          document.getElementById('resEmail').innerText = \`user\${Math.floor(Math.random()*9999)}@example.com\`; 
         }
 
         updateRegions();
