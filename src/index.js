@@ -34,7 +34,7 @@ function generateSpecificIdentity(params) {
     case 'US': default: f = fakerEN_US; break;
   }
 
-  // --- ID 生成逻辑 (含中文对照) ---
+  // --- ID 生成逻辑 ---
   if (country === 'CN') {
     idName = "居民身份证 (ID Card)";
     const cnYear = new Date().getFullYear() - age;
@@ -60,7 +60,6 @@ function generateSpecificIdentity(params) {
     finalStateName = US_STATE_DATA[region].name; // 获取全称 (Oregon)
     finalStateCode = region; // 保留代码 (OR)
   } else if (country === 'US' && !region) {
-     // 随机选一个州
      const keys = Object.keys(US_STATE_DATA);
      finalStateCode = keys[Math.floor(Math.random() * keys.length)];
      finalStateName = US_STATE_DATA[finalStateCode].name;
@@ -68,12 +67,11 @@ function generateSpecificIdentity(params) {
      finalStateName = region || f.location.state();
   }
 
-  // 2. 城市处理 (清洗中文)
-  // 前端传来的可能是 "Helena - 海伦娜 [首府]"，我们需要清洗掉 " - " 后面的内容
+  // 2. 城市处理 (清洗中文 "Helena - 海伦娜" -> "Helena")
   let finalCityRaw = city || f.location.city();
-  let finalCity = finalCityRaw.split(' - ')[0]; // 只取前半部分英文名
+  let finalCity = finalCityRaw.split(' - ')[0]; // 只取前半部分
 
-  // 3. 电话处理 (匹配州区号)
+  // 3. 电话处理
   if (country === 'US' && US_STATE_DATA[finalStateCode]) {
     const codes = US_STATE_DATA[finalStateCode].areaCodes;
     const areaCode = codes[Math.floor(Math.random() * codes.length)];
@@ -84,7 +82,7 @@ function generateSpecificIdentity(params) {
     finalPhone = f.phone.number();
   }
 
-  // 4. 邮编处理 (匹配州前缀)
+  // 4. 邮编处理
   if (country === 'US' && US_STATE_DATA[finalStateCode]) {
     const prefixes = US_STATE_DATA[finalStateCode].zipPrefix;
     const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
@@ -105,10 +103,19 @@ function generateSpecificIdentity(params) {
     fullAddress = `${finalStreet}, ${finalZip} ${finalCity}, ${finalStateName}`;
   }
   
-  // 6. 信用卡
-  const ccType = f.helpers.arrayElement(['Visa', 'MasterCard', 'American Express', 'Discover']);
-  let ccNum = f.finance.creditCardNumber(ccType.toLowerCase().replace(' ', '-')); 
-  ccNum = ccNum.replace(/-/g, ''); 
+  // 6. 信用卡严格生成逻辑 (Visa 16, Master 16, Amex 15)
+  // 随机选一个类型
+  const cardTypes = ['Visa', 'MasterCard', 'American Express'];
+  const selectedCardType = f.helpers.arrayElement(cardTypes);
+  
+  // 根据类型指定 Faker 的 provider，确保长度正确
+  let providerName = '';
+  if (selectedCardType === 'Visa') providerName = 'visa'; // 16位, 4开头
+  else if (selectedCardType === 'MasterCard') providerName = 'mastercard'; // 16位, 5开头
+  else providerName = 'amex'; // 15位, 34/37开头
+
+  let ccNum = f.finance.creditCardNumber(providerName); 
+  ccNum = ccNum.replace(/-/g, ''); // 移除所有横杠
   
   const birthDate = f.date.birthdate({ mode: 'age', min: parseInt(age), max: parseInt(age) });
 
@@ -138,7 +145,7 @@ function generateSpecificIdentity(params) {
     },
     finance: {
       ccNumber: ccNum,
-      ccType: ccType,
+      ccType: selectedCardType,
       ccCVV: f.finance.creditCardCVV(),
       ccExp: f.date.future({ years: 5 }).toISOString().substring(0, 7).replace('-', '/')
     }
@@ -271,7 +278,11 @@ app.get('/', (c) => {
             <div class="field"><label>电子邮箱 / Email</label><div id="resEmail" style="font-size:13px;">-</div></div>
 
             <div class="field"><label>州全称 / State</label><div id="resStateFull">-</div></div>
+            <!-- 新增：城市单独显示 -->
+            <div class="field"><label>城市 / City</label><div id="resCity">-</div></div>
+            
             <div class="field"><label>邮编 / Zip Code</label><div id="resZip">-</div></div>
+            <div class="field"><label>无 / Empty</label><div style="border:none;"></div></div>
 
             <!-- 信用卡专属区域 (双语对照) -->
             <div class="field full-width">
@@ -300,8 +311,7 @@ app.get('/', (c) => {
       </div>
 
       <script>
-        // --- 前端数据：城市中英文对照 ---
-        // 注意：格式为 "English - 中文"，后端会处理只取前半部分
+        // --- 前端数据 ---
         const geoData = {
           'US': {
             'MT': { 
@@ -345,7 +355,7 @@ app.get('/', (c) => {
           }
         };
 
-        // 初始化年龄下拉框 (18-80)
+        // 初始化年龄
         const ageSelect = document.getElementById('age');
         for (let i = 18; i <= 80; i++) {
           const opt = document.createElement('option');
@@ -362,10 +372,8 @@ app.get('/', (c) => {
         function updateRegions() {
           const country = countrySelect.value;
           const data = geoData[country];
-          
           regionSelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
           citySelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
-          
           if (data) {
             Object.keys(data).forEach(key => {
               const item = data[key];
@@ -380,13 +388,10 @@ app.get('/', (c) => {
         function updateCities() {
           const country = countrySelect.value;
           const region = regionSelect.value;
-          
           citySelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
-          
           if (country && region && geoData[country][region]) {
             geoData[country][region].cities.forEach(c => {
               const opt = document.createElement('option');
-              // 传递给后端的是整个字符串 "Helena - 海伦娜 [首府]"，后端会自己清洗
               opt.value = c;
               opt.innerText = c; 
               citySelect.appendChild(opt);
@@ -434,6 +439,7 @@ app.get('/', (c) => {
           
           document.getElementById('resFullAddress').innerText = data.location.formatted;
           document.getElementById('resStateFull').innerText = data.location.stateFull;
+          document.getElementById('resCity').innerText = data.location.city; // 填充城市
           document.getElementById('resZip').innerText = data.location.zipCode; 
           
           // 信用卡
