@@ -1,78 +1,104 @@
 import { Hono } from 'hono'
-import { fakerZH_CN, fakerEN_US, fakerJA, fakerDE } from '@faker-js/faker'
+import { fakerEN_US } from '@faker-js/faker'
 
 const app = new Hono()
 
-// --- 1. 后端数据：州规则 (用于生成精准的区号和邮编) ---
+// --- 1. 后端数据：全美50州+DC的真实规则 (区号+邮编) ---
+// 键名必须与前端选择的 value 一致
 const US_STATE_DATA = {
-  'OR': { name: 'Oregon', zipPrefix: ['97'], areaCodes: ['503', '541', '971'] },
-  'CA': { name: 'California', zipPrefix: ['90', '91', '92', '93', '94', '95'], areaCodes: ['213', '310', '415', '626', '909'] },
-  'NY': { name: 'New York', zipPrefix: ['10', '11', '12', '13', '14'], areaCodes: ['212', '718', '917', '646'] },
-  'TX': { name: 'Texas', zipPrefix: ['75', '76', '77', '78', '79'], areaCodes: ['214', '512', '713', '817'] },
-  'FL': { name: 'Florida', zipPrefix: ['32', '33', '34'], areaCodes: ['305', '407', '786', '813'] },
+  // === 免税州 (Top 5) ===
   'MT': { name: 'Montana', zipPrefix: ['59'], areaCodes: ['406'] },
-  'DE': { name: 'Delaware', zipPrefix: ['19'], areaCodes: ['302'] }
+  'DE': { name: 'Delaware', zipPrefix: ['19'], areaCodes: ['302'] },
+  'OR': { name: 'Oregon', zipPrefix: ['97'], areaCodes: ['503', '541', '971'] },
+  'NH': { name: 'New Hampshire', zipPrefix: ['03'], areaCodes: ['603'] },
+  'AK': { name: 'Alaska', zipPrefix: ['99'], areaCodes: ['907'] },
+
+  // === 其他州 (A-Z) ===
+  'AL': { name: 'Alabama', zipPrefix: ['35', '36'], areaCodes: ['205', '251', '334', '256'] },
+  'AZ': { name: 'Arizona', zipPrefix: ['85', '86'], areaCodes: ['602', '520', '480', '623'] },
+  'AR': { name: 'Arkansas', zipPrefix: ['71', '72'], areaCodes: ['501', '479', '870'] },
+  'CA': { name: 'California', zipPrefix: ['90', '91', '92', '93', '94', '95'], areaCodes: ['213', '310', '415', '626', '909', '858', '619'] },
+  'CO': { name: 'Colorado', zipPrefix: ['80', '81'], areaCodes: ['303', '719', '970'] },
+  'CT': { name: 'Connecticut', zipPrefix: ['06'], areaCodes: ['203', '860'] },
+  'DC': { name: 'District of Columbia', zipPrefix: ['20'], areaCodes: ['202'] },
+  'FL': { name: 'Florida', zipPrefix: ['32', '33', '34'], areaCodes: ['305', '407', '786', '813', '904'] },
+  'GA': { name: 'Georgia', zipPrefix: ['30', '31'], areaCodes: ['404', '770', '912', '706'] },
+  'HI': { name: 'Hawaii', zipPrefix: ['96'], areaCodes: ['808'] },
+  'ID': { name: 'Idaho', zipPrefix: ['83'], areaCodes: ['208'] },
+  'IL': { name: 'Illinois', zipPrefix: ['60', '61', '62'], areaCodes: ['312', '773', '630', '217'] },
+  'IN': { name: 'Indiana', zipPrefix: ['46', '47'], areaCodes: ['317', '219', '812', '574'] },
+  'IA': { name: 'Iowa', zipPrefix: ['50', '51', '52'], areaCodes: ['515', '319', '563'] },
+  'KS': { name: 'Kansas', zipPrefix: ['66', '67'], areaCodes: ['785', '316', '913'] },
+  'KY': { name: 'Kentucky', zipPrefix: ['40', '41', '42'], areaCodes: ['502', '859', '270'] },
+  'LA': { name: 'Louisiana', zipPrefix: ['70', '71'], areaCodes: ['504', '225', '318', '337'] },
+  'ME': { name: 'Maine', zipPrefix: ['04'], areaCodes: ['207'] },
+  'MD': { name: 'Maryland', zipPrefix: ['20', '21'], areaCodes: ['410', '301', '240'] },
+  'MA': { name: 'Massachusetts', zipPrefix: ['01', '02'], areaCodes: ['617', '508', '413', '978'] },
+  'MI': { name: 'Michigan', zipPrefix: ['48', '49'], areaCodes: ['313', '248', '517', '616'] },
+  'MN': { name: 'Minnesota', zipPrefix: ['55', '56'], areaCodes: ['612', '651', '218', '507'] },
+  'MS': { name: 'Mississippi', zipPrefix: ['38', '39'], areaCodes: ['601', '662', '228'] },
+  'MO': { name: 'Missouri', zipPrefix: ['63', '64', '65'], areaCodes: ['314', '816', '417', '573'] },
+  'MT': { name: 'Montana', zipPrefix: ['59'], areaCodes: ['406'] }, // Duplicate ref for safety
+  'NE': { name: 'Nebraska', zipPrefix: ['68', '69'], areaCodes: ['402', '308'] },
+  'NV': { name: 'Nevada', zipPrefix: ['88', '89'], areaCodes: ['702', '775'] },
+  'NH': { name: 'New Hampshire', zipPrefix: ['03'], areaCodes: ['603'] },
+  'NJ': { name: 'New Jersey', zipPrefix: ['07', '08'], areaCodes: ['201', '732', '609', '856'] },
+  'NM': { name: 'New Mexico', zipPrefix: ['87', '88'], areaCodes: ['505', '575'] },
+  'NY': { name: 'New York', zipPrefix: ['10', '11', '12', '13', '14'], areaCodes: ['212', '718', '917', '646', '315'] },
+  'NC': { name: 'North Carolina', zipPrefix: ['27', '28'], areaCodes: ['919', '704', '336', '252'] },
+  'ND': { name: 'North Dakota', zipPrefix: ['58'], areaCodes: ['701'] },
+  'OH': { name: 'Ohio', zipPrefix: ['43', '44', '45'], areaCodes: ['216', '614', '513', '937'] },
+  'OK': { name: 'Oklahoma', zipPrefix: ['73', '74'], areaCodes: ['405', '918', '580'] },
+  'OR': { name: 'Oregon', zipPrefix: ['97'], areaCodes: ['503', '541'] },
+  'PA': { name: 'Pennsylvania', zipPrefix: ['15', '16', '17', '18', '19'], areaCodes: ['215', '412', '717', '610'] },
+  'RI': { name: 'Rhode Island', zipPrefix: ['02'], areaCodes: ['401'] },
+  'SC': { name: 'South Carolina', zipPrefix: ['29'], areaCodes: ['803', '843', '864'] },
+  'SD': { name: 'South Dakota', zipPrefix: ['57'], areaCodes: ['605'] },
+  'TN': { name: 'Tennessee', zipPrefix: ['37', '38'], areaCodes: ['615', '901', '865', '423'] },
+  'TX': { name: 'Texas', zipPrefix: ['75', '76', '77', '78', '79'], areaCodes: ['214', '512', '713', '817', '915'] },
+  'UT': { name: 'Utah', zipPrefix: ['84'], areaCodes: ['801', '435'] },
+  'VT': { name: 'Vermont', zipPrefix: ['05'], areaCodes: ['802'] },
+  'VA': { name: 'Virginia', zipPrefix: ['22', '23', '24'], areaCodes: ['703', '804', '757', '540'] },
+  'WA': { name: 'Washington', zipPrefix: ['98', '99'], areaCodes: ['206', '509', '425', '253'] },
+  'WV': { name: 'West Virginia', zipPrefix: ['24', '25', '26'], areaCodes: ['304'] },
+  'WI': { name: 'Wisconsin', zipPrefix: ['53', '54'], areaCodes: ['414', '608', '920', '715'] },
+  'WY': { name: 'Wyoming', zipPrefix: ['82'], areaCodes: ['307'] }
 };
 
 // --- 2. 后端逻辑：生成身份 ---
 function generateSpecificIdentity(params) {
-  const { country, region, city, gender, age } = params;
+  const { region, city, gender, age } = params;
   
-  let f;
-  let idName = "ID Number";
-  let idValue = "";
-  let fullAddress = "";
-  let finalStateName = region; 
-  let finalPhone = "";
-  let finalZip = "";
+  // 强制使用 US Faker
+  const f = fakerEN_US;
   
-  // 初始化 Faker
-  switch (country) {
-    case 'CN': f = fakerZH_CN; break;
-    case 'JP': f = fakerJA; break;
-    case 'DE': f = fakerDE; break;
-    case 'US': default: f = fakerEN_US; break;
-  }
+  const idName = "社会安全码 (SSN)";
+  // SSN 格式 XXX-XX-XXXX
+  const idValue = f.string.numeric(3) + "-" + f.string.numeric(2) + "-" + f.string.numeric(4);
 
-  // --- ID 生成逻辑 ---
-  if (country === 'CN') {
-    idName = "居民身份证 (ID Card)";
-    const cnYear = new Date().getFullYear() - age;
-    idValue = `110105${cnYear}0101123X`;
-  } else if (country === 'JP') {
-    idName = "个人编号 (My Number)";
-    idValue = f.phone.number('####-####-####');
-  } else if (country === 'DE') {
-    idName = "身份证号 (Ausweisnummer)";
-    idValue = f.string.alphanumeric(9).toUpperCase();
-  } else {
-    // 美国默认
-    idName = "社会安全码 (SSN)";
-    idValue = f.string.numeric(3) + "-" + f.string.numeric(2) + "-" + f.string.numeric(4);
-  }
-
-  // --- 核心逻辑 ---
   const sexType = gender === 'female' ? 'female' : 'male';
   
   // 1. 州/省名称处理
   let finalStateCode = region;
-  if (country === 'US' && US_STATE_DATA[region]) {
-    finalStateName = US_STATE_DATA[region].name; // 获取全称 (Oregon)
-    finalStateCode = region; // 保留代码 (OR)
-  } else if (country === 'US' && !region) {
+  let finalStateName = "";
+  
+  if (region && US_STATE_DATA[region]) {
+    finalStateName = US_STATE_DATA[region].name;
+  } else {
+     // 随机选一个州
      const keys = Object.keys(US_STATE_DATA);
      finalStateCode = keys[Math.floor(Math.random() * keys.length)];
      finalStateName = US_STATE_DATA[finalStateCode].name;
-  } else {
-     finalStateName = region || f.location.state();
   }
 
-  // 2. 城市处理 (清洗中文 "Helena - 海伦娜" -> "Helena")
+  // 2. 城市处理 (清洗中文 "Helena - 海伦娜 [首府]" -> "Helena")
   let finalCityRaw = city || f.location.city();
-  let finalCity = finalCityRaw.split(' - ')[0]; // 只取前半部分
+  // 移除 " - " 及其后面的所有内容，移除 "[首府]"
+  let finalCity = finalCityRaw.split(' - ')[0].replace('[Capital]', '').trim();
 
-  // 3. 电话处理
-  if (country === 'US' && US_STATE_DATA[finalStateCode]) {
+  // 3. 电话处理 (匹配州区号)
+  let finalPhone = "";
+  if (US_STATE_DATA[finalStateCode]) {
     const codes = US_STATE_DATA[finalStateCode].areaCodes;
     const areaCode = codes[Math.floor(Math.random() * codes.length)];
     const part2 = f.string.numeric(3);
@@ -82,8 +108,9 @@ function generateSpecificIdentity(params) {
     finalPhone = f.phone.number();
   }
 
-  // 4. 邮编处理
-  if (country === 'US' && US_STATE_DATA[finalStateCode]) {
+  // 4. 邮编处理 (匹配州前缀)
+  let finalZip = "";
+  if (US_STATE_DATA[finalStateCode]) {
     const prefixes = US_STATE_DATA[finalStateCode].zipPrefix;
     const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     const suffix = f.string.numeric(3); 
@@ -94,44 +121,33 @@ function generateSpecificIdentity(params) {
 
   // 5. 街道与完整地址
   const finalStreet = f.location.streetAddress(false);
+  const fullAddress = `${finalStreet} ${finalCity}, ${finalStateCode} ${finalZip}`;
   
-  if (country === 'US') {
-    fullAddress = `${finalStreet} ${finalCity}, ${finalStateCode} ${finalZip}`;
-  } else if (country === 'CN') {
-    fullAddress = `${finalStateName}${finalCity}${finalStreet}`;
-  } else {
-    fullAddress = `${finalStreet}, ${finalZip} ${finalCity}, ${finalStateName}`;
-  }
-  
-  // 6. 信用卡严格生成逻辑 (Visa 16, Master 16, Amex 15)
-  // 随机选一个类型
+  // 6. 信用卡严格生成逻辑
   const cardTypes = ['Visa', 'MasterCard', 'American Express'];
   const selectedCardType = f.helpers.arrayElement(cardTypes);
   
-  // 根据类型指定 Faker 的 provider，确保长度正确
   let providerName = '';
   if (selectedCardType === 'Visa') providerName = 'visa'; // 16位, 4开头
   else if (selectedCardType === 'MasterCard') providerName = 'mastercard'; // 16位, 5开头
-  else providerName = 'amex'; // 15位, 34/37开头
+  else providerName = 'amex'; // 15位, 3开头
 
   let ccNum = f.finance.creditCardNumber(providerName); 
-  ccNum = ccNum.replace(/-/g, ''); // 移除所有横杠
+  ccNum = ccNum.replace(/-/g, ''); 
   
   const birthDate = f.date.birthdate({ mode: 'age', min: parseInt(age), max: parseInt(age) });
 
   return {
     personal: {
-      fullName: country === 'CN' || country === 'JP' 
-        ? `${f.person.lastName()}${f.person.firstName(sexType)}` 
-        : `${f.person.firstName(sexType)} ${f.person.lastName()}`,
-      gender: gender === 'female' ? (country === 'CN' ? '女性' : 'Female') : (country === 'CN' ? '男性' : 'Male'),
+      fullName: `${f.person.firstName(sexType)} ${f.person.lastName()}`,
+      gender: gender === 'female' ? 'Female' : 'Male',
       age: age,
       birthday: birthDate.toISOString().split('T')[0],
       phone: finalPhone,
       avatar: f.image.avatar(),
     },
     location: {
-      country: country,
+      country: 'US',
       stateFull: finalStateName,
       stateCode: finalStateCode,
       city: finalCity,
@@ -156,7 +172,8 @@ function generateSpecificIdentity(params) {
 app.get('/api/generate', (c) => {
   const query = c.req.query();
   const params = {
-    country: query.country || 'US',
+    // 强制 country = US
+    country: 'US',
     region: query.region || '',
     city: query.city || '',
     gender: query.gender || 'male',
@@ -175,7 +192,7 @@ app.get('/', (c) => {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Pro ID Generator</title>
+      <title>US Identity Generator</title>
       <style>
         body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #eef2f6; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 850px; }
@@ -206,13 +223,12 @@ app.get('/', (c) => {
         
         .highlight { color: #0070f3 !important; font-size: 16px !important; }
     
-        /* 信用卡增强样式 */
         .cc-box { background: linear-gradient(135deg, #2c3e50, #4ca1af); color: white; padding: 15px; border-radius: 8px; margin-top: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .cc-box div { color: white; border: none; text-shadow: 0 1px 2px rgba(0,0,0,0.2); letter-spacing: 1px; }
         .cc-row { display: flex; gap: 20px; margin-top: 10px; }
         .cc-label { font-size: 10px; opacity: 0.8; display: block; margin-bottom: 2px; text-transform: uppercase; }
         .cc-val { font-size: 14px; font-weight: bold; }
-    </style>
+      </style>
     </head>
     <body>
       <div class="container">
@@ -220,23 +236,21 @@ app.get('/', (c) => {
           <div class="row">
             <div class="group">
               <label>国家 / Country</label>
-              <select id="country" onchange="updateRegions()">
-                <option value="US">美国 (USA)</option>
-                <option value="CN">中国 (China)</option>
-                <option value="JP">日本 (Japan)</option>
-                <option value="DE">德国 (Germany)</option>
+              <!-- 强制只显示美国 -->
+              <select id="country" disabled>
+                <option value="US">美国 (United States)</option>
               </select>
             </div>
             <div class="group">
-              <label>州/省 (State/Region)</label>
+              <label>州 / State (Tax-Free Top 5)</label>
               <select id="region" onchange="updateCities()">
-                <option value="">-- 请选择 / Select --</option>
+                <option value="">-- 随机 / Random --</option>
               </select>
             </div>
             <div class="group">
-              <label>城市 (City)</label>
+              <label>城市 / City</label>
               <select id="city">
-                <option value="">-- 请选择 / Select --</option>
+                <option value="">-- 随机 / Random --</option>
               </select>
             </div>
           </div>
@@ -278,13 +292,11 @@ app.get('/', (c) => {
             <div class="field"><label>电子邮箱 / Email</label><div id="resEmail" style="font-size:13px;">-</div></div>
 
             <div class="field"><label>州全称 / State</label><div id="resStateFull">-</div></div>
-            <!-- 新增：城市单独显示 -->
             <div class="field"><label>城市 / City</label><div id="resCity">-</div></div>
             
             <div class="field"><label>邮编 / Zip Code</label><div id="resZip">-</div></div>
             <div class="field"><label>无 / Empty</label><div style="border:none;"></div></div>
 
-            <!-- 信用卡专属区域 (双语对照) -->
             <div class="field full-width">
               <label>信用卡信息 / Credit Card Details</label>
               <div class="cc-box">
@@ -311,51 +323,77 @@ app.get('/', (c) => {
       </div>
 
       <script>
-        // --- 前端数据 ---
+        // --- 前端数据：全美50州+DC 完整列表 (中英文+首府) ---
+        // 排序逻辑：MT, DE, OR, NH, AK 在前，其他 A-Z
         const geoData = {
-          'US': {
-            'MT': { 
-              name: 'Montana (MT) - 蒙大拿州', 
-              cities: ['Helena - 海伦娜 [首府]', 'Billings - 比灵斯', 'Missoula - 米苏拉', 'Bozeman - 博兹曼', 'Great Falls - 大瀑布城'] 
-            },
-            'DE': { 
-              name: 'Delaware (DE) - 特拉华州', 
-              cities: ['Dover - 多佛 [首府]', 'Wilmington - 威尔明顿', 'Newark - 纽瓦克', 'Middletown - 米德尔敦'] 
-            },
-            'OR': { 
-              name: 'Oregon (OR) - 俄勒冈州', 
-              cities: ['Salem - 塞勒姆 [首府]', 'Portland - 波特兰', 'Eugene - 尤金', 'Gresham - 格雷沙姆'] 
-            },
-            'CA': { 
-              name: 'California (CA) - 加利福尼亚州', 
-              cities: ['Sacramento - 萨克拉门托 [首府]', 'Los Angeles - 洛杉矶', 'San Francisco - 旧金山', 'San Diego - 圣地亚哥', 'San Jose - 圣荷西'] 
-            },
-            'NY': { 
-              name: 'New York (NY) - 纽约州', 
-              cities: ['Albany - 奥尔巴尼 [首府]', 'New York City - 纽约市', 'Buffalo - 布法罗', 'Rochester - 罗切斯特'] 
-            },
-            'TX': { 
-              name: 'Texas (TX) - 得克萨斯州', 
-              cities: ['Austin - 奥斯汀 [首府]', 'Houston - 休斯敦', 'Dallas - 达拉斯', 'San Antonio - 圣安东尼奥'] 
-            },
-            'FL': { 
-              name: 'Florida (FL) - 佛罗里达州', 
-              cities: ['Tallahassee - 塔拉哈西 [首府]', 'Miami - 迈阿密', 'Orlando - 奥兰多', 'Tampa - 坦帕', 'Jacksonville - 杰克逊维尔'] 
-            }
-          },
-          'CN': {
-            '北京市': { name: '北京市', cities: ['东城区', '西城区', '朝阳区', '海淀区'] },
-            '广东省': { name: '广东省', cities: ['广州市', '深圳市', '珠海市'] }
-          },
-          'JP': {
-            'Tokyo': { name: 'Tokyo', cities: ['Shinjuku', 'Shibuya'] }
-          },
-          'DE': {
-            'Berlin': { name: 'Berlin', cities: ['Berlin'] }
-          }
+          // 1. Montana (MT)
+          'MT': { name: 'Montana (MT) - 蒙大拿州', cities: ['Helena - 海伦娜 [首府]', 'Billings - 比灵斯', 'Missoula - 米苏拉', 'Bozeman - 博兹曼'] },
+          // 2. Delaware (DE)
+          'DE': { name: 'Delaware (DE) - 特拉华州', cities: ['Dover - 多佛 [首府]', 'Wilmington - 威尔明顿', 'Newark - 纽瓦克', 'Middletown - 米德尔敦'] },
+          // 3. Oregon (OR)
+          'OR': { name: 'Oregon (OR) - 俄勒冈州', cities: ['Salem - 塞勒姆 [首府]', 'Portland - 波特兰', 'Eugene - 尤金', 'Gresham - 格雷沙姆'] },
+          // 4. New Hampshire (NH)
+          'NH': { name: 'New Hampshire (NH) - 新罕布什尔州', cities: ['Concord - 康科德 [首府]', 'Manchester - 曼彻斯特', 'Nashua - 纳舒厄'] },
+          // 5. Alaska (AK)
+          'AK': { name: 'Alaska (AK) - 阿拉斯加州', cities: ['Juneau - 朱诺 [首府]', 'Anchorage - 安克雷奇', 'Fairbanks - 费尔班克斯'] },
+
+          // --- 以下按字母顺序 A-Z ---
+          'AL': { name: 'Alabama (AL) - 阿拉巴马州', cities: ['Montgomery - 蒙哥马利 [首府]', 'Birmingham - 伯明翰', 'Huntsville - 亨茨维尔'] },
+          'AZ': { name: 'Arizona (AZ) - 亚利桑那州', cities: ['Phoenix - 凤凰城 [首府]', 'Tucson - 图森', 'Mesa - 梅萨'] },
+          'AR': { name: 'Arkansas (AR) - 阿肯色州', cities: ['Little Rock - 小岩城 [首府]', 'Fayetteville - 费耶特维尔', 'Fort Smith - 史密斯堡'] },
+          'CA': { name: 'California (CA) - 加利福尼亚州', cities: ['Sacramento - 萨克拉门托 [首府]', 'Los Angeles - 洛杉矶', 'San Francisco - 旧金山', 'San Diego - 圣地亚哥'] },
+          'CO': { name: 'Colorado (CO) - 科罗拉多州', cities: ['Denver - 丹佛 [首府]', 'Colorado Springs - 科罗拉多斯普林斯', 'Aurora - 奥罗拉'] },
+          'CT': { name: 'Connecticut (CT) - 康涅狄格州', cities: ['Hartford - 哈特福德 [首府]', 'Bridgeport - 布里奇波特', 'New Haven - 纽黑文'] },
+          'DC': { name: 'District of Columbia (DC) - 华盛顿特区', cities: ['Washington - 华盛顿 [首府]'] },
+          'FL': { name: 'Florida (FL) - 佛罗里达州', cities: ['Tallahassee - 塔拉哈西 [首府]', 'Miami - 迈阿密', 'Orlando - 奥兰多', 'Tampa - 坦帕'] },
+          'GA': { name: 'Georgia (GA) - 佐治亚州', cities: ['Atlanta - 亚特兰大 [首府]', 'Augusta - 奥古斯塔', 'Savannah - 萨凡纳'] },
+          'HI': { name: 'Hawaii (HI) - 夏威夷州', cities: ['Honolulu - 檀香山 [首府]', 'Hilo - 希洛', 'Kailua - 凯鲁瓦'] },
+          'ID': { name: 'Idaho (ID) - 爱达荷州', cities: ['Boise - 博伊西 [首府]', 'Meridian - 此午线', 'Nampa - 南帕'] },
+          'IL': { name: 'Illinois (IL) - 伊利诺伊州', cities: ['Springfield - 斯普林菲尔德 [首府]', 'Chicago - 芝加哥', 'Aurora - 奥罗拉'] },
+          'IN': { name: 'Indiana (IN) - 印第安纳州', cities: ['Indianapolis - 印第安纳波利斯 [首府]', 'Fort Wayne - 韦恩堡', 'Evansville - 埃文斯维尔'] },
+          'IA': { name: 'Iowa (IA) - 爱荷华州', cities: ['Des Moines - 得梅因 [首府]', 'Cedar Rapids - 锡达拉皮兹', 'Davenport - 达文波特'] },
+          'KS': { name: 'Kansas (KS) - 堪萨斯州', cities: ['Topeka - 托皮卡 [首府]', 'Wichita - 威奇托', 'Overland Park - 欧弗兰帕克'] },
+          'KY': { name: 'Kentucky (KY) - 肯塔基州', cities: ['Frankfort - 法兰克福 [首府]', 'Louisville - 路易斯维尔', 'Lexington - 列克星敦'] },
+          'LA': { name: 'Louisiana (LA) - 路易斯安那州', cities: ['Baton Rouge - 巴吞鲁日 [首府]', 'New Orleans - 新奥尔良', 'Shreveport - 什里夫波特'] },
+          'ME': { name: 'Maine (ME) - 缅因州', cities: ['Augusta - 奥古斯塔 [首府]', 'Portland - 波特兰', 'Bangor - 班戈'] },
+          'MD': { name: 'Maryland (MD) - 马里兰州', cities: ['Annapolis - 安纳波利斯 [首府]', 'Baltimore - 巴尔的摩', 'Frederick - 弗雷德里克'] },
+          'MA': { name: 'Massachusetts (MA) - 马萨诸塞州', cities: ['Boston - 波士顿 [首府]', 'Worcester - 伍斯特', 'Springfield - 斯普林菲尔德'] },
+          'MI': { name: 'Michigan (MI) - 密歇根州', cities: ['Lansing - 兰辛 [首府]', 'Detroit - 底特律', 'Grand Rapids - 大急流城'] },
+          'MN': { name: 'Minnesota (MN) - 明尼苏达州', cities: ['Saint Paul - 圣保罗 [首府]', 'Minneapolis - 明尼阿波利斯', 'Rochester - 罗切斯特'] },
+          'MS': { name: 'Mississippi (MS) - 密西西比州', cities: ['Jackson - 杰克逊 [首府]', 'Gulfport - 格尔夫波特', 'Southaven - 南黑文'] },
+          'MO': { name: 'Missouri (MO) - 密苏里州', cities: ['Jefferson City - 杰斐逊城 [首府]', 'Kansas City - 堪萨斯城', 'St. Louis - 圣路易斯'] },
+          'NE': { name: 'Nebraska (NE) - 内布拉斯加州', cities: ['Lincoln - 林肯 [首府]', 'Omaha - 奥马哈', 'Bellevue - 贝尔维尤'] },
+          'NV': { name: 'Nevada (NV) - 内华达州', cities: ['Carson City - 卡森城 [首府]', 'Las Vegas - 拉斯维加斯', 'Reno - 里诺'] },
+          'NJ': { name: 'New Jersey (NJ) - 新泽西州', cities: ['Trenton - 特伦顿 [首府]', 'Newark - 纽瓦克', 'Jersey City - 泽西城'] },
+          'NM': { name: 'New Mexico (NM) - 新墨西哥州', cities: ['Santa Fe - 圣菲 [首府]', 'Albuquerque - 阿尔伯克基', 'Las Cruces - 拉斯克鲁塞斯'] },
+          'NY': { name: 'New York (NY) - 纽约州', cities: ['Albany - 奥尔巴尼 [首府]', 'New York City - 纽约市', 'Buffalo - 布法罗'] },
+          'NC': { name: 'North Carolina (NC) - 北卡罗来纳州', cities: ['Raleigh - 罗利 [首府]', 'Charlotte - 夏洛特', 'Greensboro - 格林斯伯勒'] },
+          'ND': { name: 'North Dakota (ND) - 北达科他州', cities: ['Bismarck - 俾斯麦 [首府]', 'Fargo - 法戈', 'Grand Forks - 大福克斯'] },
+          'OH': { name: 'Ohio (OH) - 俄亥俄州', cities: ['Columbus - 哥伦布 [首府]', 'Cleveland - 克利夫兰', 'Cincinnati - 辛辛那提'] },
+          'OK': { name: 'Oklahoma (OK) - 俄克拉荷马州', cities: ['Oklahoma City - 俄克拉荷马城 [首府]', 'Tulsa - 塔尔萨', 'Norman - 诺曼'] },
+          'PA': { name: 'Pennsylvania (PA) - 宾夕法尼亚州', cities: ['Harrisburg - 哈里斯堡 [首府]', 'Philadelphia - 费城', 'Pittsburgh - 匹兹堡'] },
+          'RI': { name: 'Rhode Island (RI) - 罗德岛州', cities: ['Providence - 普罗维登斯 [首府]', 'Warwick - 沃里克', 'Cranston - 克兰斯顿'] },
+          'SC': { name: 'South Carolina (SC) - 南卡罗来纳州', cities: ['Columbia - 哥伦比亚 [首府]', 'Charleston - 查尔斯顿', 'North Charleston - 北查尔斯顿'] },
+          'SD': { name: 'South Dakota (SD) - 南达科他州', cities: ['Pierre - 皮尔 [首府]', 'Sioux Falls - 苏瀑', 'Rapid City - 拉皮德城'] },
+          'TN': { name: 'Tennessee (TN) - 田纳西州', cities: ['Nashville - 纳什维尔 [首府]', 'Memphis - 孟菲斯', 'Knoxville - 诺克斯维尔'] },
+          'TX': { name: 'Texas (TX) - 得克萨斯州', cities: ['Austin - 奥斯汀 [首府]', 'Houston - 休斯敦', 'Dallas - 达拉斯'] },
+          'UT': { name: 'Utah (UT) - 犹他州', cities: ['Salt Lake City - 盐湖城 [首府]', 'West Valley City - 西瓦利城', 'Provo - 普罗沃'] },
+          'VT': { name: 'Vermont (VT) - 佛蒙特州', cities: ['Montpelier - 蒙彼利埃 [首府]', 'Burlington - 伯灵顿', 'South Burlington - 南伯灵顿'] },
+          'VA': { name: 'Virginia (VA) - 弗吉尼亚州', cities: ['Richmond - 里士满 [首府]', 'Virginia Beach - 弗吉尼亚海滩', 'Norfolk - 诺福克'] },
+          'WA': { name: 'Washington (WA) - 华盛顿州', cities: ['Olympia - 奥林匹亚 [首府]', 'Seattle - 西雅图', 'Spokane - 斯波坎'] },
+          'WV': { name: 'West Virginia (WV) - 西弗吉尼亚州', cities: ['Charleston - 查尔斯顿 [首府]', 'Huntington - 亨廷顿', 'Morgantown - 摩根敦'] },
+          'WI': { name: 'Wisconsin (WI) - 威斯康星州', cities: ['Madison - 麦迪逊 [首府]', 'Milwaukee - 密尔沃基', 'Green Bay - 绿湾'] },
+          'WY': { name: 'Wyoming (WY) - 怀俄明州', cities: ['Cheyenne - 夏延 [首府]', 'Casper - 卡斯珀', 'Laramie - 拉勒米'] }
         };
 
-        // 初始化年龄
+        // 强制排序数组 (MT, DE, OR, NH, AK 先，其他按 A-Z)
+        // 注意：Object.keys 返回顺序不一定保证，所以这里我们显式定义顺序
+        const sortedStateKeys = [
+          'MT', 'DE', 'OR', 'NH', 'AK', // Top 5
+          'AL', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'NE', 'NV', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+        ];
+
+        // 初始化年龄 (18-80)
         const ageSelect = document.getElementById('age');
         for (let i = 18; i <= 80; i++) {
           const opt = document.createElement('option');
@@ -365,32 +403,30 @@ app.get('/', (c) => {
           ageSelect.appendChild(opt);
         }
 
-        const countrySelect = document.getElementById('country');
         const regionSelect = document.getElementById('region');
         const citySelect = document.getElementById('city');
 
         function updateRegions() {
-          const country = countrySelect.value;
-          const data = geoData[country];
           regionSelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
           citySelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
-          if (data) {
-            Object.keys(data).forEach(key => {
-              const item = data[key];
+          
+          // 使用 sortedStateKeys 确保顺序
+          sortedStateKeys.forEach(key => {
+            const item = geoData[key];
+            if (item) {
               const opt = document.createElement('option');
               opt.value = key; 
               opt.innerText = item.name; 
               regionSelect.appendChild(opt);
-            });
-          }
+            }
+          });
         }
 
         function updateCities() {
-          const country = countrySelect.value;
           const region = regionSelect.value;
           citySelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
-          if (country && region && geoData[country][region]) {
-            geoData[country][region].cities.forEach(c => {
+          if (region && geoData[region]) {
+            geoData[region].cities.forEach(c => {
               const opt = document.createElement('option');
               opt.value = c;
               opt.innerText = c; 
@@ -406,7 +442,6 @@ app.get('/', (c) => {
           btn.disabled = true;
 
           const params = new URLSearchParams({
-            country: countrySelect.value,
             region: regionSelect.value,
             city: citySelect.value,
             gender: document.getElementById('gender').value,
@@ -439,10 +474,9 @@ app.get('/', (c) => {
           
           document.getElementById('resFullAddress').innerText = data.location.formatted;
           document.getElementById('resStateFull').innerText = data.location.stateFull;
-          document.getElementById('resCity').innerText = data.location.city; // 填充城市
+          document.getElementById('resCity').innerText = data.location.city;
           document.getElementById('resZip').innerText = data.location.zipCode; 
           
-          // 信用卡
           document.getElementById('resCCNum').innerText = data.finance.ccNumber;
           document.getElementById('resCCType').innerText = data.finance.ccType;
           document.getElementById('resCCExp').innerText = data.finance.ccExp;
@@ -451,6 +485,7 @@ app.get('/', (c) => {
           document.getElementById('resEmail').innerText = \`user\${Math.floor(Math.random()*9999)}@example.com\`; 
         }
 
+        // 初始化加载州列表
         updateRegions();
       </script>
     </body>
