@@ -1,0 +1,6 @@
+name = "fake-id-generator"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# 这一行确保不会开启 Pages 模式
+workers_dev = true
