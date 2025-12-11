@@ -3,29 +3,28 @@ import { fakerZH_CN, fakerEN_US, fakerJA, fakerDE } from '@faker-js/faker'
 
 const app = new Hono()
 
-// --- 1. 后端逻辑：根据参数生成特定身份 ---
+// --- 1. 后端逻辑：生成身份数据 ---
 function generateSpecificIdentity(params) {
   const { country, region, city, gender, age } = params;
   
-  // 根据国家选择对应的 Faker 语言包
   let f;
   let idName = "ID Number";
   let idValue = "";
+  let fullAddress = ""; // 用于存放完整格式地址
   
+  // 根据国家初始化 Faker 和 ID 逻辑
   switch (country) {
     case 'CN':
       f = fakerZH_CN;
       idName = "居民身份证 (ID Card)";
-      // 模拟简单的中国身份证生成逻辑 (仅用于格式展示)
-      const cnRegion = "110101"; // 示例地区码
+      const cnRegion = "110101"; 
       const cnYear = new Date().getFullYear() - age;
-      const cnBirthday = `${cnYear}0101`;
-      idValue = `${cnRegion}${cnBirthday}123X`; 
+      idValue = `${cnRegion}${cnYear}0101123X`; 
       break;
     case 'JP':
       f = fakerJA;
       idName = "マイナンバー (My Number)";
-      idValue = f.phone.number('####-####-####'); // 模拟格式
+      idValue = f.phone.number('####-####-####');
       break;
     case 'DE':
       f = fakerDE;
@@ -36,22 +35,36 @@ function generateSpecificIdentity(params) {
     default:
       f = fakerEN_US;
       idName = "SSN (Social Security)";
-      // 生成格式合法的 SSN (XXX-XX-XXXX)
       idValue = f.string.numeric(3) + "-" + f.string.numeric(2) + "-" + f.string.numeric(4);
       break;
   }
 
-  // 处理性别 (Faker 接收 'female' 或 'male')
+  // 处理性别和年龄
   const sexType = gender === 'female' ? 'female' : 'male';
-  
-  // 处理生日 (根据年龄反推)
   const birthDate = f.date.birthdate({ mode: 'age', min: parseInt(age), max: parseInt(age) });
+  
+  // 处理地址逻辑
+  // 如果前端传来了特定城市/州，就用传来的，否则随机生成
+  const finalState = region || (country === 'US' ? f.location.state({ abbreviated: true }) : f.location.state());
+  const finalCity = city || f.location.city();
+  const finalStreet = f.location.streetAddress(false); // false 表示不包含城市名，只生成街道
+  const finalZip = f.location.zipCode();
+
+  // === 核心修改：生成完整地址字符串 ===
+  // 格式：35254 Williamson Ridges Gray, ME 04039
+  if (country === 'US') {
+    fullAddress = `${finalStreet} ${finalCity}, ${finalState} ${finalZip}`;
+  } else if (country === 'CN') {
+    fullAddress = `${finalState}${finalCity}${finalStreet}`; // 中文习惯
+  } else {
+    fullAddress = `${finalStreet}, ${finalZip} ${finalCity}, ${finalState}`; // 欧美通用
+  }
   
   return {
     personal: {
       fullName: country === 'CN' || country === 'JP' 
-        ? `${f.person.lastName()}${f.person.firstName(sexType)}` // 亚洲：姓+名
-        : `${f.person.firstName(sexType)} ${f.person.lastName()}`, // 西方：名+姓
+        ? `${f.person.lastName()}${f.person.firstName(sexType)}` 
+        : `${f.person.firstName(sexType)} ${f.person.lastName()}`,
       gender: gender === 'female' ? (country === 'CN' ? '女性' : 'Female') : (country === 'CN' ? '男性' : 'Male'),
       age: age,
       birthday: birthDate.toISOString().split('T')[0],
@@ -60,12 +73,11 @@ function generateSpecificIdentity(params) {
     },
     location: {
       country: country,
-      // 如果用户选了州/市，就用用户的；否则用 Faker 随机生成的
-      state: region || f.location.state(),
-      city: city || f.location.city(),
-      // 街道和邮编由 Faker 随机生成，模拟该国格式
-      street: f.location.streetAddress(true), 
-      zipCode: f.location.zipCode(),
+      state: finalState,
+      city: finalCity,
+      street: finalStreet,
+      zipCode: finalZip,
+      formatted: fullAddress // 新增：完整格式化地址
     },
     ids: {
       name: idName,
@@ -81,7 +93,6 @@ function generateSpecificIdentity(params) {
 // --- 2. API 接口 ---
 app.get('/api/generate', (c) => {
   const query = c.req.query();
-  // 默认值处理
   const params = {
     country: query.country || 'US',
     region: query.region || '',
@@ -94,7 +105,7 @@ app.get('/api/generate', (c) => {
   return c.json(data);
 });
 
-// --- 3. 前端页面 (包含地理数据映射) ---
+// --- 3. 前端页面 ---
 app.get('/', (c) => {
   const html = `
     <!DOCTYPE html>
@@ -102,34 +113,45 @@ app.get('/', (c) => {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>高级身份生成器 | Advanced ID Gen</title>
+      <title>Full Address ID Generator</title>
       <style>
-        body { font-family: "Segoe UI", sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        body { font-family: "Segoe UI", sans-serif; background: #eef2f6; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 800px; }
         
-        /* 控制面板样式 */
-        .controls { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .controls { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .row { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
         .group { flex: 1; min-width: 140px; }
-        label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: bold;}
-        select, input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-        button { background: #0070f3; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; transition: 0.2s; }
-        button:hover { background: #005bb5; }
+        label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; font-weight: 600;}
+        select, input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 14px; outline: none; transition: 0.2s; background: #f9f9f9; }
+        select:focus, input:focus { border-color: #0070f3; background: #fff; }
+        
+        button { background: #0070f3; color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; transition: 0.2s; margin-top: 10px; }
+        button:hover { background: #005bb5; transform: translateY(-1px); }
 
-        /* 结果卡片样式 */
-        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; }
+        .card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: none; animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
         .card.active { display: block; }
-        .header { background: linear-gradient(135deg, #0070f3, #00a6ff); color: white; padding: 30px; display: flex; align-items: center; }
-        .avatar { width: 80px; height: 80px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.4); margin-right: 20px; background: #eee; }
-        .info-grid { padding: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-        .field { background: #f9fafb; padding: 10px; border-radius: 6px; border: 1px solid #eee; }
-        .field label { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
-        .field div { font-family: monospace; font-size: 15px; color: #333; font-weight: 600; word-break: break-all; }
+        .header { background: linear-gradient(135deg, #0052cc, #0070f3); color: white; padding: 30px; display: flex; align-items: center; }
+        .avatar { width: 90px; height: 90px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); margin-right: 25px; background: #ddd; object-fit: cover; }
+        
+        .info-grid { padding: 25px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        
+        /* 针对地址栏的特殊样式：跨两列 */
+        .full-width { grid-column: span 2; }
+        
+        .field { background: #f8f9fa; padding: 12px 15px; border-radius: 8px; border: 1px solid #eee; transition: 0.2s; }
+        .field:hover { border-color: #ddd; background: #fff; }
+        .field label { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.5px; }
+        .field div { font-family: "Consolas", monospace; font-size: 15px; color: #222; font-weight: 600; word-break: break-word; }
+        
+        /* 复制提示 */
+        .copy-hint { font-size: 10px; color: #999; float: right; cursor: pointer; }
       </style>
     </head>
     <body>
       <div class="container">
-        <!-- 控制区域 -->
+        <!-- 控制面板 -->
         <div class="controls">
           <div class="row">
             <div class="group">
@@ -142,15 +164,15 @@ app.get('/', (c) => {
               </select>
             </div>
             <div class="group">
-              <label>州/省 (Region)</label>
+              <label>州/省 (State/Region)</label>
               <select id="region" onchange="updateCities()">
-                <option value="">-- 请选择 --</option>
+                <option value="">-- 随机 / Random --</option>
               </select>
             </div>
             <div class="group">
               <label>城市 (City)</label>
               <select id="city">
-                <option value="">-- 请选择 --</option>
+                <option value="">-- 随机 / Random --</option>
               </select>
             </div>
           </div>
@@ -164,63 +186,68 @@ app.get('/', (c) => {
             </div>
             <div class="group">
               <label>年龄 / Age</label>
-              <input type="number" id="age" value="28" min="18" max="80">
+              <input type="number" id="age" value="25" min="18" max="80">
             </div>
           </div>
-          <button onclick="generate()">生成身份 (Generate)</button>
+          <button onclick="generate()">生成身份 (Generate Identity)</button>
         </div>
 
-        <!-- 结果显示区域 -->
+        <!-- 结果卡片 -->
         <div id="resultCard" class="card">
           <div class="header">
             <img id="resAvatar" class="avatar" src="">
             <div>
-              <h1 id="resName" style="margin:0; font-size: 24px;"></h1>
-              <div id="resBasic" style="opacity: 0.9; font-size: 14px; margin-top:5px;"></div>
+              <h1 id="resName" style="margin:0; font-size: 26px;"></h1>
+              <div id="resBasic" style="opacity: 0.9; font-size: 15px; margin-top:6px;"></div>
             </div>
           </div>
           <div class="info-grid">
+            <div class="field full-width">
+              <label>完整地址 / Full Address (Street, City, State Zip)</label>
+              <div id="resFullAddress" style="color:#0052cc; font-size:16px;">-</div>
+            </div>
+
             <div class="field"><label>生日 / Birthday</label><div id="resBirthday">-</div></div>
             <div class="field"><label>电话 / Phone</label><div id="resPhone">-</div></div>
-            <div class="field"><label id="labelID">SSN/ID</label><div id="resID">-</div></div>
             
-            <div class="field" style="grid-column: span 2;">
-              <label>地址 / Address</label>
-              <div id="resAddress">-</div>
-            </div>
-            <div class="field"><label>城市 / City</label><div id="resCity">-</div></div>
-            <div class="field"><label>州/省 / State</label><div id="resState">-</div></div>
-            <div class="field"><label>邮编 / Zip</label><div id="resZip">-</div></div>
+            <div class="field"><label id="labelID">SSN</label><div id="resID">-</div></div>
             <div class="field"><label>信用卡 / Credit Card</label><div id="resCC">-</div></div>
+            
+            <!-- 这里可以根据需要保留单独的省市信息，或者如果只要完整地址也可以删掉下面这些 -->
+            <div class="field"><label>城市 / City</label><div id="resCity">-</div></div>
+            <div class="field"><label>邮编 / Zip</label><div id="resZip">-</div></div>
           </div>
         </div>
       </div>
 
       <script>
-        // --- 地理数据映射 (前端硬编码) ---
+        // --- 核心升级：包含州缩写和更多城市的数据 ---
+        // 为了生成 "ME 04039" 格式，US 的键名改成了缩写
         const geoData = {
           'US': {
-            'Oregon': ['Portland', 'Salem', 'Eugene'],
-            'California': ['Los Angeles', 'San Francisco', 'San Diego', 'Sacramento'],
-            'New York': ['New York City', 'Buffalo', 'Albany'],
-            'Texas': ['Houston', 'Austin', 'Dallas'],
-            'Florida': ['Miami', 'Orlando', 'Tampa']
+            'OR': { name: 'Oregon', cities: ['Portland', 'Salem', 'Eugene', 'Gresham'] },
+            'CA': { name: 'California', cities: ['Los Angeles', 'San Francisco', 'San Diego', 'Sacramento', 'San Jose'] },
+            'NY': { name: 'New York', cities: ['New York City', 'Buffalo', 'Albany', 'Rochester'] },
+            'TX': { name: 'Texas', cities: ['Houston', 'Austin', 'Dallas', 'San Antonio'] },
+            'FL': { name: 'Florida', cities: ['Miami', 'Orlando', 'Tampa', 'Jacksonville'] },
+            // 新增：蒙大拿州 (Montana)
+            'MT': { name: 'Montana', cities: ['Helena', 'Billings', 'Missoula', 'Bozeman', 'Great Falls'] },
+            // 新增：特拉华州 (Delaware)
+            'DE': { name: 'Delaware', cities: ['Dover', 'Wilmington', 'Newark', 'Middletown'] }
           },
           'CN': {
-            '北京市': ['朝阳区', '海淀区', '东城区'],
-            '广东省': ['广州市', '深圳市', '珠海市'],
-            '上海市': ['浦东新区', '黄浦区'],
-            '浙江省': ['杭州市', '宁波市', '温州市']
+            '北京市': { name: '北京市', cities: ['朝阳区', '海淀区', '东城区', '西城区'] },
+            '广东省': { name: '广东省', cities: ['广州市', '深圳市', '珠海市', '佛山市'] },
+            '上海市': { name: '上海市', cities: ['浦东新区', '黄浦区', '静安区'] },
+            '浙江省': { name: '浙江省', cities: ['杭州市', '宁波市', '温州市'] }
           },
           'JP': {
-            'Tokyo': ['Shinjuku', 'Shibuya', 'Minato'],
-            'Osaka': ['Osaka City', 'Sakai'],
-            'Kyoto': ['Kyoto City', 'Uji']
+            'Tokyo': { name: 'Tokyo', cities: ['Shinjuku', 'Shibuya', 'Minato', 'Akihabara'] },
+            'Osaka': { name: 'Osaka', cities: ['Osaka City', 'Sakai'] }
           },
           'DE': {
-            'Bavaria': ['Munich', 'Nuremberg'],
-            'Berlin': ['Berlin'],
-            'Hamburg': ['Hamburg']
+            'Bavaria': { name: 'Bavaria', cities: ['Munich', 'Nuremberg', 'Augsburg'] },
+            'Berlin': { name: 'Berlin', cities: ['Berlin'] }
           }
         };
 
@@ -228,23 +255,25 @@ app.get('/', (c) => {
         const regionSelect = document.getElementById('region');
         const citySelect = document.getElementById('city');
 
-        // 更新州/省下拉框
         function updateRegions() {
           const country = countrySelect.value;
-          const regions = geoData[country] ? Object.keys(geoData[country]) : [];
+          const data = geoData[country];
           
           regionSelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
           citySelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
           
-          regions.forEach(r => {
-            const opt = document.createElement('option');
-            opt.value = r;
-            opt.innerText = r;
-            regionSelect.appendChild(opt);
-          });
+          if (data) {
+            Object.keys(data).forEach(key => {
+              const item = data[key];
+              const opt = document.createElement('option');
+              opt.value = key; // 传递给后端的是键名 (如 'MT', 'DE', 'OR')
+              // 显示给用户的是全名 (如 'Montana (MT)')
+              opt.innerText = country === 'US' ? \`\${item.name} (\${key})\` : item.name;
+              regionSelect.appendChild(opt);
+            });
+          }
         }
 
-        // 更新城市下拉框
         function updateCities() {
           const country = countrySelect.value;
           const region = regionSelect.value;
@@ -252,7 +281,7 @@ app.get('/', (c) => {
           citySelect.innerHTML = '<option value="">-- 随机 / Random --</option>';
           
           if (country && region && geoData[country][region]) {
-            geoData[country][region].forEach(c => {
+            geoData[country][region].cities.forEach(c => {
               const opt = document.createElement('option');
               opt.value = c;
               opt.innerText = c;
@@ -261,10 +290,10 @@ app.get('/', (c) => {
           }
         }
 
-        // 调用 API 生成数据
         async function generate() {
           const btn = document.querySelector('button');
-          btn.innerText = '生成中...';
+          const originalText = btn.innerText;
+          btn.innerText = '正在生成... (Generating)';
           btn.disabled = true;
 
           const params = new URLSearchParams({
@@ -280,14 +309,13 @@ app.get('/', (c) => {
             const data = await res.json();
             renderCard(data);
           } catch (e) {
-            alert('生成失败，请重试');
+            alert('Error generating data');
           } finally {
-            btn.innerText = '生成身份 (Generate)';
+            btn.innerText = originalText;
             btn.disabled = false;
           }
         }
 
-        // 渲染结果到卡片
         function renderCard(data) {
           document.getElementById('resultCard').classList.add('active');
           document.getElementById('resAvatar').src = data.personal.avatar;
@@ -300,11 +328,12 @@ app.get('/', (c) => {
           document.getElementById('labelID').innerText = data.ids.name;
           document.getElementById('resID').innerText = data.ids.value;
           
-          document.getElementById('resAddress').innerText = data.location.street;
-          document.getElementById('resCity').innerText = data.location.city;
-          document.getElementById('resState').innerText = data.location.state;
-          document.getElementById('resZip').innerText = data.location.zipCode;
+          // 这里的关键：直接显示后端传回来的完整格式地址
+          document.getElementById('resFullAddress').innerText = data.location.formatted;
           
+          // 额外信息
+          document.getElementById('resCity').innerText = data.location.city;
+          document.getElementById('resZip').innerText = data.location.zipCode;
           document.getElementById('resCC').innerText = data.finance.cc;
         }
 
