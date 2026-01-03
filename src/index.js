@@ -3,7 +3,7 @@ import { fakerEN_US } from '@faker-js/faker'
 
 const app = new Hono()
 
-// --- 1. 后端数据：全美50州 + DC (无重复键名，严格校验) ---
+// --- 1. 后端数据：全美50州 + DC ---
 const US_STATE_DATA = {
   // === 免税州 (Tax Free) ===
   'MT': { name: 'Montana', zipPrefix: ['59'], areaCodes: ['406'] },
@@ -12,7 +12,7 @@ const US_STATE_DATA = {
   'NH': { name: 'New Hampshire', zipPrefix: ['03'], areaCodes: ['603'] },
   'AK': { name: 'Alaska', zipPrefix: ['99'], areaCodes: ['907'] },
 
-  // === 其他州 (A-Z, 已移除上述5个免税州以避免键名重复) ===
+  // === 其他州 ===
   'AL': { name: 'Alabama', zipPrefix: ['35', '36'], areaCodes: ['205', '251', '334', '256'] },
   'AZ': { name: 'Arizona', zipPrefix: ['85', '86'], areaCodes: ['602', '520', '480', '623'] },
   'AR': { name: 'Arkansas', zipPrefix: ['71', '72'], areaCodes: ['501', '479', '870'] },
@@ -37,10 +37,8 @@ const US_STATE_DATA = {
   'MN': { name: 'Minnesota', zipPrefix: ['55', '56'], areaCodes: ['612', '651', '218', '507'] },
   'MS': { name: 'Mississippi', zipPrefix: ['38', '39'], areaCodes: ['601', '662', '228'] },
   'MO': { name: 'Missouri', zipPrefix: ['63', '64', '65'], areaCodes: ['314', '816', '417', '573'] },
-  // MT removed here (already at top)
   'NE': { name: 'Nebraska', zipPrefix: ['68', '69'], areaCodes: ['402', '308'] },
   'NV': { name: 'Nevada', zipPrefix: ['88', '89'], areaCodes: ['702', '775'] },
-  // NH removed here (already at top)
   'NJ': { name: 'New Jersey', zipPrefix: ['07', '08'], areaCodes: ['201', '732', '609', '856'] },
   'NM': { name: 'New Mexico', zipPrefix: ['87', '88'], areaCodes: ['505', '575'] },
   'NY': { name: 'New York', zipPrefix: ['10', '11', '12', '13', '14'], areaCodes: ['212', '718', '917', '646', '315'] },
@@ -48,7 +46,6 @@ const US_STATE_DATA = {
   'ND': { name: 'North Dakota', zipPrefix: ['58'], areaCodes: ['701'] },
   'OH': { name: 'Ohio', zipPrefix: ['43', '44', '45'], areaCodes: ['216', '614', '513', '937'] },
   'OK': { name: 'Oklahoma', zipPrefix: ['73', '74'], areaCodes: ['405', '918', '580'] },
-  // OR removed here (already at top)
   'PA': { name: 'Pennsylvania', zipPrefix: ['15', '16', '17', '18', '19'], areaCodes: ['215', '412', '717', '610'] },
   'RI': { name: 'Rhode Island', zipPrefix: ['02'], areaCodes: ['401'] },
   'SC': { name: 'South Carolina', zipPrefix: ['29'], areaCodes: ['803', '843', '864'] },
@@ -67,31 +64,26 @@ const US_STATE_DATA = {
 // --- 2. 后端逻辑：生成身份 ---
 function generateSpecificIdentity(params) {
   const { region, city, gender, age } = params;
-  const f = fakerEN_US; // 强制美国数据
+  const f = fakerEN_US; 
   
   const idName = "社会安全码 (SSN)";
   const idValue = f.string.numeric(3) + "-" + f.string.numeric(2) + "-" + f.string.numeric(4);
-
   const sexType = gender === 'female' ? 'female' : 'male';
   
-  // 1. 州/省名称处理
   let finalStateCode = region;
   let finalStateName = "";
   
   if (region && US_STATE_DATA[region]) {
     finalStateName = US_STATE_DATA[region].name;
   } else {
-     // 随机
      const keys = Object.keys(US_STATE_DATA);
      finalStateCode = keys[Math.floor(Math.random() * keys.length)];
      finalStateName = US_STATE_DATA[finalStateCode].name;
   }
 
-  // 2. 城市处理 (清洗: "Helena - 海伦娜 [首府]" -> "Helena")
   let finalCityRaw = city || f.location.city();
   let finalCity = finalCityRaw.split(' - ')[0].replace('[首府]', '').replace('[Capital]', '').trim();
 
-  // 3. 电话处理
   let finalPhone = "";
   if (US_STATE_DATA[finalStateCode]) {
     const codes = US_STATE_DATA[finalStateCode].areaCodes;
@@ -103,7 +95,6 @@ function generateSpecificIdentity(params) {
     finalPhone = f.phone.number();
   }
 
-  // 4. 邮编处理
   let finalZip = "";
   if (US_STATE_DATA[finalStateCode]) {
     const prefixes = US_STATE_DATA[finalStateCode].zipPrefix;
@@ -114,18 +105,16 @@ function generateSpecificIdentity(params) {
     finalZip = f.location.zipCode('#####'); 
   }
 
-  // 5. 完整地址
   const finalStreet = f.location.streetAddress(false);
   const fullAddress = `${finalStreet} ${finalCity}, ${finalStateCode} ${finalZip}`;
   
-  // 6. 信用卡逻辑 (严格)
   const cardTypes = ['Visa', 'MasterCard', 'American Express'];
   const selectedCardType = f.helpers.arrayElement(cardTypes);
   
   let providerName = '';
-  if (selectedCardType === 'Visa') providerName = 'visa'; // 16位 4开头
-  else if (selectedCardType === 'MasterCard') providerName = 'mastercard'; // 16位 5开头
-  else providerName = 'amex'; // 15位 3开头
+  if (selectedCardType === 'Visa') providerName = 'visa';
+  else if (selectedCardType === 'MasterCard') providerName = 'mastercard'; 
+  else providerName = 'amex'; 
 
   let ccNum = f.finance.creditCardNumber(providerName); 
   ccNum = ccNum.replace(/-/g, ''); 
@@ -212,8 +201,28 @@ app.get('/', (c) => {
         @media(max-width: 600px) { .full-width { grid-column: span 1; } }
 
         .field label { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; display: flex; justify-content: space-between; }
-        .field div { font-family: "Consolas", "Monaco", monospace; font-size: 15px; color: #333; font-weight: 600; border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; min-height: 20px; }
+        .field div { font-family: "Consolas", "Monaco", monospace; font-size: 15px; color: #333; font-weight: 600; border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; min-height: 20px; position: relative; }
         
+        /* 复制功能样式增强 */
+        .copy-hover { 
+          cursor: pointer; 
+          transition: background 0.2s, color 0.2s; 
+          border-radius: 4px; 
+          padding: 2px 5px; 
+          margin: -2px -5px; /* offset padding */
+        }
+        .copy-hover:hover { 
+          background: #e6f7ff; 
+          color: #0070f3; 
+        }
+        .copy-hover:hover::after {
+          content: '📋';
+          position: absolute;
+          right: 5px;
+          font-size: 12px;
+          opacity: 0.7;
+        }
+
         .highlight { color: #0070f3 !important; font-size: 16px !important; }
     
         .cc-box { background: linear-gradient(135deg, #2c3e50, #4ca1af); color: white; padding: 15px; border-radius: 8px; margin-top: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -221,6 +230,36 @@ app.get('/', (c) => {
         .cc-row { display: flex; gap: 20px; margin-top: 10px; }
         .cc-label { font-size: 10px; opacity: 0.8; display: block; margin-bottom: 2px; text-transform: uppercase; }
         .cc-val { font-size: 14px; font-weight: bold; }
+        
+        /* 信用卡部分的特殊复制样式 */
+        .cc-copy-hover { cursor: pointer; border-radius: 4px; padding: 0 2px; transition: 0.2s; }
+        .cc-copy-hover:hover { background: rgba(255,255,255,0.2); }
+
+        /* Toast 提示框 */
+        .toast {
+          position: fixed;
+          bottom: 30px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0,0,0,0.85);
+          color: white;
+          padding: 10px 24px;
+          border-radius: 30px;
+          font-size: 14px;
+          font-weight: 500;
+          opacity: 0;
+          transition: opacity 0.3s ease, transform 0.3s ease;
+          pointer-events: none;
+          z-index: 9999;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .toast.show {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+        .toast.hide {
+          transform: translateX(-50%) translateY(10px);
+        }
       </style>
     </head>
     <body>
@@ -266,14 +305,14 @@ app.get('/', (c) => {
           <div class="header">
             <img id="resAvatar" class="avatar" src="">
             <div>
-              <h1 id="resName" style="margin:0; font-size: 24px;"></h1>
+              <h1 id="resName" class="copy-hover" style="margin:0; font-size: 24px; display:inline-block;"></h1>
               <div id="resBasic" style="opacity: 0.8; font-size: 14px; margin-top:5px;"></div>
             </div>
           </div>
           <div class="info-grid">
             
             <div class="field full-width">
-              <label>完整地址 / Full Address</label>
+              <label>完整地址 / Full Address (Click to copy)</label>
               <div id="resFullAddress" class="highlight">-</div>
             </div>
 
@@ -290,21 +329,21 @@ app.get('/', (c) => {
             <div class="field"><label>无 / Empty</label><div style="border:none;"></div></div>
 
             <div class="field full-width">
-              <label>信用卡信息 / Credit Card Details</label>
+              <label>信用卡信息 / Credit Card Details (Click fields to copy)</label>
               <div class="cc-box">
-                <div style="font-size: 20px; margin-bottom: 10px; font-family: monospace;" id="resCCNum">0000 0000 0000 0000</div>
+                <div style="font-size: 20px; margin-bottom: 10px; font-family: monospace;" id="resCCNum" class="cc-copy-hover">0000 0000 0000 0000</div>
                 <div class="cc-row">
                   <div>
                     <span class="cc-label">类型 / Type</span>
-                    <span class="cc-val" id="resCCType">-</span>
+                    <span class="cc-val cc-copy-hover" id="resCCType">-</span>
                   </div>
                   <div>
                     <span class="cc-label">过期 / Exp</span>
-                    <span class="cc-val" id="resCCExp">-</span>
+                    <span class="cc-val cc-copy-hover" id="resCCExp">-</span>
                   </div>
                   <div>
                     <span class="cc-label">安全码 / CVV</span>
-                    <span class="cc-val" id="resCCCVV">-</span>
+                    <span class="cc-val cc-copy-hover" id="resCCCVV">-</span>
                   </div>
                 </div>
               </div>
@@ -314,15 +353,17 @@ app.get('/', (c) => {
         </div>
       </div>
 
+      <!-- Toast 容器 -->
+      <div id="toast" class="toast">已复制到剪贴板</div>
+
       <script>
-        // --- 前端数据：前端显示的中英文对照 ---
+        // --- 前端数据 ---
         const geoData = {
           'MT': { name: 'Montana (MT) - 蒙大拿州', cities: ['Helena - 海伦娜 [首府]', 'Billings - 比灵斯', 'Missoula - 米苏拉', 'Bozeman - 博兹曼'] },
           'DE': { name: 'Delaware (DE) - 特拉华州', cities: ['Dover - 多佛 [首府]', 'Wilmington - 威尔明顿', 'Newark - 纽瓦克'] },
           'OR': { name: 'Oregon (OR) - 俄勒冈州', cities: ['Salem - 塞勒姆 [首府]', 'Portland - 波特兰', 'Eugene - 尤金', 'Gresham - 格雷沙姆'] },
           'NH': { name: 'New Hampshire (NH) - 新罕布什尔州', cities: ['Concord - 康科德 [首府]', 'Manchester - 曼彻斯特', 'Nashua - 纳舒厄'] },
           'AK': { name: 'Alaska (AK) - 阿拉斯加州', cities: ['Juneau - 朱诺 [首府]', 'Anchorage - 安克雷奇', 'Fairbanks - 费尔班克斯'] },
-
           'AL': { name: 'Alabama (AL) - 阿拉巴马州', cities: ['Montgomery - 蒙哥马利 [首府]', 'Birmingham - 伯明翰'] },
           'AZ': { name: 'Arizona (AZ) - 亚利桑那州', cities: ['Phoenix - 凤凰城 [首府]', 'Tucson - 图森'] },
           'AR': { name: 'Arkansas (AR) - 阿肯色州', cities: ['Little Rock - 小岩城 [首府]', 'Fayetteville - 费耶特维尔'] },
@@ -371,13 +412,11 @@ app.get('/', (c) => {
           'WY': { name: 'Wyoming (WY) - 怀俄明州', cities: ['Cheyenne - 夏延 [首府]', 'Casper - 卡斯珀'] }
         };
 
-        // 关键：强制排序数组 (免税州在前，其他在后)
         const sortedStateKeys = [
-          'MT', 'DE', 'OR', 'NH', 'AK', // Top 5
+          'MT', 'DE', 'OR', 'NH', 'AK', 
           'AL', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'NE', 'NV', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
         ];
 
-        // 初始化年龄
         const ageSelect = document.getElementById('age');
         for (let i = 18; i <= 80; i++) {
           const opt = document.createElement('option');
@@ -418,6 +457,46 @@ app.get('/', (c) => {
           }
         }
 
+        // --- Toast & Copy Logic ---
+        let toastTimeout;
+        function showToast(msg) {
+          const t = document.getElementById('toast');
+          t.innerText = msg;
+          t.classList.remove('hide');
+          t.classList.add('show');
+          
+          if (toastTimeout) clearTimeout(toastTimeout);
+          toastTimeout = setTimeout(() => {
+            t.classList.remove('show');
+            t.classList.add('hide');
+          }, 2000);
+        }
+
+        function bindItem(elementId, textValue, isCreditCard = false) {
+          const el = document.getElementById(elementId);
+          if (!el) return;
+          
+          el.innerText = textValue;
+          
+          // 如果不是信用卡区域，添加通用样式
+          if (!isCreditCard) {
+            el.classList.add('copy-hover');
+          }
+          
+          // 设置点击标题
+          el.title = "点击复制 / Click to Copy";
+          
+          // 重新绑定点击事件（防止多次绑定）
+          el.onclick = function() {
+            navigator.clipboard.writeText(textValue).then(() => {
+              showToast('已复制: ' + (textValue.length > 20 ? textValue.substring(0,15)+'...' : textValue));
+            }).catch(err => {
+              console.error('Copy failed', err);
+              showToast('复制失败');
+            });
+          };
+        }
+
         async function generate() {
           const btn = document.querySelector('button');
           const originalText = btn.innerText;
@@ -447,25 +526,29 @@ app.get('/', (c) => {
         function renderCard(data) {
           document.getElementById('resultCard').classList.add('active');
           document.getElementById('resAvatar').src = data.personal.avatar;
-          document.getElementById('resName').innerText = data.personal.fullName;
           document.getElementById('resBasic').innerText = \`\${data.personal.gender}, \${data.personal.age} years old\`;
           
-          document.getElementById('resPhone').innerText = data.personal.phone;
-          document.getElementById('resBirthday').innerText = data.personal.birthday;
+          // 使用 bindItem 自动填充文本并绑定复制事件
+          bindItem('resName', data.personal.fullName);
+          bindItem('resPhone', data.personal.phone);
+          bindItem('resBirthday', data.personal.birthday);
+          
           document.getElementById('labelID').innerText = data.ids.name;
-          document.getElementById('resID').innerText = data.ids.value;
+          bindItem('resID', data.ids.value);
           
-          document.getElementById('resFullAddress').innerText = data.location.formatted;
-          document.getElementById('resStateFull').innerText = data.location.stateFull;
-          document.getElementById('resCity').innerText = data.location.city;
-          document.getElementById('resZip').innerText = data.location.zipCode; 
+          const email = \`user\${Math.floor(Math.random()*9999)}@example.com\`;
+          bindItem('resEmail', email);
+
+          bindItem('resFullAddress', data.location.formatted);
+          bindItem('resStateFull', data.location.stateFull);
+          bindItem('resCity', data.location.city);
+          bindItem('resZip', data.location.zipCode); 
           
-          document.getElementById('resCCNum').innerText = data.finance.ccNumber;
-          document.getElementById('resCCType').innerText = data.finance.ccType;
-          document.getElementById('resCCExp').innerText = data.finance.ccExp;
-          document.getElementById('resCCCVV').innerText = data.finance.ccCVV;
-          
-          document.getElementById('resEmail').innerText = \`user\${Math.floor(Math.random()*9999)}@example.com\`; 
+          // 信用卡部分 (isCreditCard = true, 样式略有不同)
+          bindItem('resCCNum', data.finance.ccNumber, true);
+          bindItem('resCCType', data.finance.ccType, true);
+          bindItem('resCCExp', data.finance.ccExp, true);
+          bindItem('resCCCVV', data.finance.ccCVV, true);
         }
 
         updateRegions();
